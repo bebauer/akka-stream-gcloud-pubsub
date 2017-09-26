@@ -2,7 +2,7 @@ package akka.stream.pubsub
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.pipe
-import com.google.pubsub.v1.pubsub.{AcknowledgeRequest, ReceivedMessage}
+import com.google.pubsub.v1.pubsub.AcknowledgeRequest
 
 object Acknowledger {
   def name(context: String, id: Int): String = s"pubsub-acknowledger-$context-$id"
@@ -10,9 +10,9 @@ object Acknowledger {
   def props(source: ActorRef, url: String, subscription: String): Props =
     Props(new Acknowledger(source, url, subscription))
 
-  final case class Acknowledge(messages: Seq[ReceivedMessage])
+  final case class Acknowledge(messages: ReceivedMessages)
 
-  final case class Acknowledged(messages: Seq[ReceivedMessage])
+  final case class Acknowledged(messages: ReceivedMessages)
 }
 
 class Acknowledger(source: ActorRef, val url: String, subscription: String)

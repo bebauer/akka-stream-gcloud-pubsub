@@ -9,17 +9,21 @@ import de.codecentric.akka.stream.gcloud.pubsub.client.{
   SubscriptionName,
   TopicName
 }
+import org.scalatest.Suite
+import utils.LocalPubSub
 
-import scala.concurrent.{Await, ExecutionContextExecutor}
 import scala.concurrent.duration._
+import scala.concurrent.{Await, ExecutionContextExecutor}
 
-trait PubSubTestKit {
+trait PubSubTestKit extends LocalPubSub {
+  this: Suite =>
+
   type PubSubTestSettings = (ProjectName, TopicName, SubscriptionName)
 
   implicit val executionContext: ExecutionContextExecutor =
     scala.concurrent.ExecutionContext.global
 
-  val pubSubUrl: String = "http://localhost:8085"
+  def pubSubUrl: String = pubSubEmulatorUrl
 
   lazy val client: PubSubClient = PubSubClient(pubSubUrl)
 
@@ -38,7 +42,7 @@ trait PubSubTestKit {
   def publishMessages(settings: PubSubTestSettings, messages: PubsubMessage*): Unit = {
     val (_, topic, _) = settings
 
-    Await.ready(client.publish(topic.fullName, messages), 10.seconds)
+    Await.ready(client.publish(topic.fullName, messages.to[Seq]), 10.seconds)
   }
 
   def pullMessages(settings: PubSubTestSettings, amount: Int): Seq[ReceivedMessage] = {

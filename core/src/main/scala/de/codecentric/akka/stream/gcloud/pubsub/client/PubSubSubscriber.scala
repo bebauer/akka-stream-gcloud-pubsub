@@ -1,5 +1,6 @@
 package de.codecentric.akka.stream.gcloud.pubsub.client
 
+import akka.stream.pubsub.ReceivedMessages
 import com.google.auth.Credentials
 import com.google.protobuf.empty.Empty
 import com.google.pubsub.v1.pubsub._
@@ -31,11 +32,11 @@ trait PubSubSubscriber {
     subscriberStub
       .createSubscription(subscription)
 
-  def pull(request: PullRequest): Future[Seq[ReceivedMessage]] =
+  def pull(request: PullRequest): Future[ReceivedMessages] =
     subscriberStub
       .pull(request)
       .map { response =>
-        response.receivedMessages
+        response.receivedMessages.to[Seq]
       }
 
   def acknowledge(request: AcknowledgeRequest): Future[Empty] =

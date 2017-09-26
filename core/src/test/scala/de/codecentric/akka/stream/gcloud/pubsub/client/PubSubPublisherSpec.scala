@@ -8,10 +8,11 @@ import com.google.pubsub.v1.pubsub.{ListTopicsRequest, PubsubMessage, Topic}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.time.{Millis, Seconds, Span}
 import org.scalatest.{Matchers, WordSpecLike}
+import utils.LocalPubSub
 
 import scala.concurrent.ExecutionContextExecutor
 
-class PubSubPublisherSpec extends WordSpecLike with Matchers with ScalaFutures {
+class PubSubPublisherSpec extends WordSpecLike with Matchers with ScalaFutures with LocalPubSub {
 
   implicit val executionContext: ExecutionContextExecutor =
     scala.concurrent.ExecutionContext.global
@@ -86,8 +87,8 @@ class PubSubPublisherSpec extends WordSpecLike with Matchers with ScalaFutures {
       }
     }
 
-    def withClient(block: PubSubPublisher => Unit) = {
-      def publisher = PubSubClient("http://localhost:8085")
+    def withClient(block: PubSubPublisher => Unit): Unit = {
+      def publisher = PubSubClient(pubSubEmulatorUrl)
 
       try {
         block(publisher)
@@ -96,7 +97,7 @@ class PubSubPublisherSpec extends WordSpecLike with Matchers with ScalaFutures {
       }
     }
 
-    def createTopic(publisher: PubSubPublisher, topicName: TopicName) =
+    def createTopic(publisher: PubSubPublisher, topicName: TopicName): Unit =
       whenReady(publisher.createTopic(Topic(topicName.fullName))) { topic =>
         println(s"topic created: $topic")
       }

@@ -1,5 +1,4 @@
-
-lazy val root = project
+lazy val `akka-stream-gcloud-pubsub` = project
   .in(file("."))
   .settings(commonSettings)
   .settings(publish := {}, publishLocal := {})
@@ -114,6 +113,7 @@ lazy val library = new {
     val GfcGuava           = "0.2.5"
     val ScalaPbRuntimeGrpc = "0.6.2"
     val CirceVersion       = "0.8.0"
+    val MetricsVersion     = "3.5.8_a2.4"
   }
 
   val AkkaActor          = "com.typesafe.akka"      %% "akka-actor"                     % Version.Akka
@@ -138,5 +138,5 @@ lazy val library = new {
   val Scalactic          = "org.scalactic"          %% "scalactic"                      % Version.ScalaTest
   val ScalaTest          = "org.scalatest"          %% "scalatest"                      % Version.ScalaTest
   val ScalaPbRuntimeGrpc = "com.trueaccord.scalapb" %% "scalapb-runtime-grpc"           % Version.ScalaPbRuntimeGrpc
-  val Metrics            = "nl.grons"               %% "metrics-scala"                  % "3.5.8_a2.4"
+  val Metrics            = "nl.grons"               %% "metrics-scala"                  % Version.MetricsVersion
 }

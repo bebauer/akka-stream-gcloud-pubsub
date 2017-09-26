@@ -3,7 +3,7 @@ package akka.stream.pubsub
 import java.util.UUID
 
 import akka.actor.Status.Failure
-import akka.actor.{ActorRef, ActorSystem, PoisonPill, Terminated}
+import akka.actor.{ActorRef, ActorSystem, Terminated}
 import akka.stream.ActorMaterializer
 import akka.stream.pubsub.Subscriber.{FetchMessages, MessagesPulled}
 import akka.stream.scaladsl.{Sink, Source}
@@ -16,10 +16,10 @@ import de.codecentric.akka.stream.gcloud.pubsub.client._
 import io.grpc.{Status, StatusRuntimeException}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
+import utils.LocalPubSub
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor}
-import scala.util
 
 class PubSubSourceSpec
     extends TestKit(ActorSystem("source-test"))
@@ -27,11 +27,14 @@ class PubSubSourceSpec
     with Eventually
     with Matchers
     with ScalaFutures
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with LocalPubSub {
 
-  final val EmulatorUrl = "http://localhost:8085"
+  override def afterAll(): Unit = {
+    super.afterAll()
 
-  override protected def afterAll(): Unit = system.terminate()
+    system.terminate()
+  }
 
   "the source " should {
     "tell the client actor to pull a message " in {
@@ -46,7 +49,7 @@ class PubSubSourceSpec
         implicit val mat = ActorMaterializer()
 
         val source =
-          Source.fromGraph(PubSubSource(EmulatorUrl, subscription.fullName))
+          Source.fromGraph(PubSubSource(pubSubEmulatorUrl, subscription.fullName))
 
         val seq = source.take(200).runWith(Sink.seq)
 
@@ -122,7 +125,7 @@ class PubSubSourceSpec
   }
 
   private def createSource(subscriber: ActorRef, mappingCallback: (ActorRef => Unit)) =
-    Source.fromGraph(new PubSubSource(EmulatorUrl, "subs") {
+    Source.fromGraph(new PubSubSource(pubSubEmulatorUrl, "subs") {
       override protected def createSubscriber(system: ActorSystem,
                                               stageActor: GraphStageLogic.StageActor,
                                               id: String): ActorRef = {
@@ -139,7 +142,7 @@ class PubSubSourceSpec
     val topic        = TopicName(project, "top")
     val subscription = SubscriptionName(project, "subs")
 
-    val client = PubSubClient(EmulatorUrl)
+    val client = PubSubClient(pubSubEmulatorUrl)
 
     Await.ready(client.createTopic(Topic(topic.fullName)), 10.seconds)
     Await.ready(client.createSubscription(Subscription(subscription.fullName, topic.fullName)),

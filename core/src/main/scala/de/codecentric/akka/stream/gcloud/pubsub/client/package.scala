@@ -2,6 +2,10 @@ package de.codecentric.akka.stream.gcloud.pubsub
 
 package object client {
 
+  type Seq[+A] = scala.collection.immutable.Seq[A]
+
+  val Seq = scala.collection.immutable.Seq
+
   object ProjectName {
     private val ProjectNamePattern = "(projects/)?(.+)".r
 

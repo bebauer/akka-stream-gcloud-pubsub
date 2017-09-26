@@ -41,7 +41,7 @@ class SubscriberSpec
       val subscription     = Subscription(subscriptionName.fullName, topic.fullName)
 
       val subscriber = system.actorOf(
-        Subscriber.props(testActor, "http://localhost:8085", subscriptionName.fullName)
+        Subscriber.props(testActor, pubSubEmulatorUrl, subscriptionName.fullName)
       )
 
       withClient { client =>
@@ -72,7 +72,7 @@ class SubscriberSpec
       val subscriptionName = SubscriptionName(project, "testSubscription")
 
       val subscriber = system.actorOf(
-        Subscriber.props(testActor, "http://localhost:8085", subscriptionName.fullName)
+        Subscriber.props(testActor, pubSubEmulatorUrl, subscriptionName.fullName)
       )
 
       withClient { client =>

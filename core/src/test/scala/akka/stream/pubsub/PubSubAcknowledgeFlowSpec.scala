@@ -21,7 +21,9 @@ class PubSubAcknowledgeFlowSpec
 
   implicit val mat: ActorMaterializer = ActorMaterializer()
 
-  override def afterAll {
+  override def afterAll() {
+    super.afterAll()
+
     TestKit.shutdownActorSystem(system)
   }
 

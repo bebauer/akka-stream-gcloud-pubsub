@@ -21,7 +21,7 @@ trait PubSubPublisher {
   def listTopics(request: ListTopicsRequest): Future[Seq[Topic]] =
     publisherStub
       .listTopics(request)
-      .map(_.topics)
+      .map(_.topics.to[Seq])
 
   def createTopic(topic: Topic): Future[Topic] =
     publisherStub
@@ -32,5 +32,5 @@ trait PubSubPublisher {
       .map(topics => topics.find(_.name == topicName))
 
   def publish(topicName: String, messages: Seq[PubsubMessage]): Future[Seq[String]] =
-    publisherStub.publish(PublishRequest(topicName, messages)).map(_.messageIds)
+    publisherStub.publish(PublishRequest(topicName, messages)).map(_.messageIds.to[Seq])
 }

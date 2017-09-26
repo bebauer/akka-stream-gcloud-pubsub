@@ -2,7 +2,7 @@ package akka.stream.pubsub
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Props}
 import akka.pattern.pipe
-import com.google.pubsub.v1.pubsub.{PullRequest, ReceivedMessage}
+import com.google.pubsub.v1.pubsub.PullRequest
 
 object Subscriber {
   def name(context: String, id: Int): String = s"pubsub-subscriber-$context-$id"
@@ -10,7 +10,7 @@ object Subscriber {
   def props(source: ActorRef, url: String, subscription: String): Props =
     Props(new Subscriber(source, url, subscription))
 
-  final case class MessagesPulled(messages: Seq[ReceivedMessage])
+  final case class MessagesPulled(messages: ReceivedMessages)
 
   final case class FetchMessages(count: Int)
 }

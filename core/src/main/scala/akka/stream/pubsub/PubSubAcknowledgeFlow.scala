@@ -6,7 +6,6 @@ import akka.NotUsed
 import akka.actor.{ActorRef, PoisonPill, Terminated}
 import akka.stream._
 import akka.stream.pubsub.Acknowledger.{Acknowledge, Acknowledged}
-import akka.stream.pubsub.PubSubAcknowledgeFlow.ReceivedMessages
 import akka.stream.scaladsl.{Balance, Flow, GraphDSL, Merge}
 import akka.stream.stage.GraphStageLogic.StageActor
 import akka.stream.stage.GraphStageLogic.StageActorRef.Receive
@@ -15,11 +14,8 @@ import com.google.pubsub.v1.pubsub.ReceivedMessage
 import de.codecentric.akka.stream.gcloud.pubsub.client.PubSubClient
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Iterable
 
 object PubSubAcknowledgeFlow {
-  private type ReceivedMessages = Seq[ReceivedMessage]
-
   def apply(
       subscription: String,
       url: String = PubSubClient.DefaultPubSubUrl
@@ -33,9 +29,7 @@ object PubSubAcknowledgeFlow {
           batch :+ element
         }
         .via(flow)
-        .mapConcat[ReceivedMessage] { messages =>
-          messages.to[Iterable]
-        }
+        .mapConcat(identity)
 
     def parallel(count: Int): Flow[ReceivedMessages, ReceivedMessages, NotUsed] =
       Flow.fromGraph(GraphDSL.create() { implicit builder =>
