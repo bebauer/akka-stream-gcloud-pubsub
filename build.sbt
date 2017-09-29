@@ -86,15 +86,10 @@ lazy val commonSettings = Seq(
   }
 )
 
-lazy val sbtCredentialFile =
-  Seq(file("/var/lib/jenkins/secrets/crm360-credentials"),
-      Path.userHome / ".ivy2" / ".crm360-credentials").find(_.exists())
-
 lazy val publishSettings = Seq(
-  sbtCredentialFile.map(credentials += Credentials(_)).getOrElse(credentials ++= Seq()),
   publishTo := {
-    val artifactory = "https://artifactory.crm.conrad.com/artifactory/"
-    Some("releases" at artifactory + "maven-releases")
+    val nexus = "https://nexus.dev.crm.conrad24.com/repository/"
+    Some("releases" at nexus + "maven-releases")
   }
 )
 
