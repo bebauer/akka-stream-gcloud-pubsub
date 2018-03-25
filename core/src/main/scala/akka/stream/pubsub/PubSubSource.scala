@@ -26,8 +26,9 @@ object PubSubSource {
 }
 
 class PubSubSource(url: String, subscription: String)
-    extends GraphStage[SourceShape[ReceivedMessage]]
+  extends GraphStage[SourceShape[ReceivedMessage]]
     with Config {
+
   import PubSubSource._
 
   private val out: Outlet[ReceivedMessage] = Outlet("GooglePubSubSource.out")
@@ -42,12 +43,12 @@ class PubSubSource(url: String, subscription: String)
   override def createLogic(inheritedAttributes: Attributes): GraphStageLogic =
     new GraphStageLogic(shape) {
 
-      private var self: StageActor                  = _
-      private var subscriber: ActorRef              = _
+      private var self: StageActor = _
+      private var subscriber: ActorRef = _
       private var buffer: Iterator[ReceivedMessage] = Iterator.empty
-      private val id                                = UUID.randomUUID().toString
-      private var fetchCount                        = maxParallelFetchRequests
-      private var system: ActorSystem               = _
+      private val id = UUID.randomUUID().toString
+      private var fetchCount = maxParallelFetchRequests
+      private var system: ActorSystem = _
 
       // since we do not know how many elements are in buffer without accessing it
       private var itemCount: Int = 0
@@ -64,7 +65,7 @@ class PubSubSource(url: String, subscription: String)
 
       def running: Receive = {
         case (_, Failure(ex: StatusRuntimeException))
-            if ex.getStatus == Status.RESOURCE_EXHAUSTED =>
+          if ex.getStatus == Status.RESOURCE_EXHAUSTED || ex.getStatus == Status.UNAVAILABLE =>
           self.become(waiting)
           system.scheduler.scheduleOnce(waitingTime, self.ref, Resume)(system.dispatcher)
         case (_, MessagesPulled(messages)) =>
