@@ -1,5 +1,7 @@
 # Akka Streams Google Cloud Pub/Sub
 
+[![Download](https://api.bintray.com/packages/bebauer/maven/akka-stream-gcloud-pubsub/images/download.svg) ](https://bintray.com/bebauer/maven/akka-stream-gcloud-pubsub/_latestVersion)
+
 An akka streams solution for Google's Cloud Pub/Sub. It supports stages for
 pulling, acknownleding and publishing messages.
 
