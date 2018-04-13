@@ -6,14 +6,14 @@ import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
 import akka.testkit.TestKit
-import com.google.protobuf.ByteString
-import com.google.pubsub.v1.pubsub.PubsubMessage
+import gcloud.scala.pubsub._
+import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import org.slf4j.LoggerFactory
 
+import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
 
 object PerformanceSpec {
   val MessageTemplate: (Int, String) => String = (id: Int, message: String) =>
@@ -27,52 +27,52 @@ class PerformanceSpec
     with Matchers
     with ScalaFutures
     with PubSubTestKit
+    with DockerPubSub
     with BeforeAndAfterAll {
 
   import PerformanceSpec._
 
   private val log = LoggerFactory.getLogger(PerformanceSpec.getClass)
 
-  implicit val mat = ActorMaterializer()
+  implicit val mat: ActorMaterializer = ActorMaterializer()
 
-  override def afterAll {
+  override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
+
+  override val publishTimeout: FiniteDuration = 20.seconds
 
   "the stream" should {
     "process lots of data" ignore {
       val settings = newTestSetup()
 
-      val insert = Future {
-        log.info("Insert messages...")
+      log.info("Insert messages...")
 
-        var i = 1
+      var i = 1
 
-        while (i <= 2000) {
-          val messages = for (j <- 1 to 1000)
-            yield
-              PubsubMessage(ByteString.copyFromUtf8(MessageTemplate(i * j, s"Blah blah $i - $j")))
+      while (i <= 2000) {
+        val messages = for (j <- 1 to 1000) yield MessageTemplate(i * j, s"Blah blah $i - $j")
 
-          publishMessages(settings, messages: _*)
+        publishMessages(settings, messages: _*) should have size messages.size
 
-          i += 1
-        }
+        log.info(s"$i - published ${messages.size} messages")
 
-        log.info("Finished inserting messages...")
+        i += 1
       }
 
-      Await.ready(insert, 30.seconds)
+      log.info("Finished inserting messages...")
 
       val (_, _, subscription) = settings
 
-      import PubSubAcknowledgeFlow._
-
-      val source  = Source.fromGraph(PubSubSource(pubSubUrl, subscription.fullName))
-      val ackFlow = PubSubAcknowledgeFlow(subscription.fullName, pubSubUrl).batched(size = 500)
+      val source =
+        Source.fromGraph(PubSubSource(subscription, SubscriberStub.pubsubUrlToSettings(pubSubUrl)))
+      val ackFlow =
+        PubSubAcknowledgeFlow(subscription, SubscriberStub.pubsubUrlToSettings(pubSubUrl))
 
       val start = System.currentTimeMillis()
 
       val future = source.async
+        .groupedWithin(500, 100.milliseconds)
         .via(ackFlow)
         .async
         .take(1000000)

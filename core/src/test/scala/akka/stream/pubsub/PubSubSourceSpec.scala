@@ -1,8 +1,5 @@
 package akka.stream.pubsub
 
-import java.util.UUID
-
-import akka.actor.Status.Failure
 import akka.actor.{ActorRef, ActorSystem, Terminated}
 import akka.stream.ActorMaterializer
 import akka.stream.pubsub.Subscriber.{FetchMessages, MessagesPulled}
@@ -10,13 +7,11 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.stage.GraphStageLogic
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.{TestKit, TestProbe}
-import com.google.protobuf.ByteString
-import com.google.pubsub.v1.pubsub.{PubsubMessage, ReceivedMessage, Subscription, Topic}
-import de.codecentric.akka.stream.gcloud.pubsub.client._
-import io.grpc.{Status, StatusRuntimeException}
+import com.google.pubsub.v1.ReceivedMessage
+import gcloud.scala.pubsub._
+import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import utils.LocalPubSub
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContextExecutor}
@@ -28,13 +23,15 @@ class PubSubSourceSpec
     with Matchers
     with ScalaFutures
     with BeforeAndAfterAll
-    with LocalPubSub {
+    with PubSubTestKit
+    with DockerPubSub {
 
-  override def afterAll(): Unit = {
-    super.afterAll()
-
-    system.terminate()
-  }
+  override def afterAll(): Unit =
+    try {
+      super.afterAll()
+    } finally {
+      system.terminate()
+    }
 
   "the source " should {
     "tell the client actor to pull a message " in {
@@ -43,13 +40,15 @@ class PubSubSourceSpec
 
       val subscription = preparePubSub()
 
-      implicit val system = ActorSystem()
+      implicit val system: ActorSystem = ActorSystem()
 
       try {
-        implicit val mat = ActorMaterializer()
+        implicit val mat: ActorMaterializer = ActorMaterializer()
 
         val source =
-          Source.fromGraph(PubSubSource(pubSubEmulatorUrl, subscription.fullName))
+          Source.fromGraph(
+            PubSubSource(subscription, SubscriberStub.pubsubUrlToSettings(pubSubEmulatorUrl))
+          )
 
         val seq = source.take(200).runWith(Sink.seq)
 
@@ -61,35 +60,13 @@ class PubSubSourceSpec
       }
     }
 
-    "recover from resource exhaustion" in {
-      val subscriberProbe    = TestProbe()
-      var stageRef: ActorRef = null
-
-      val source = createSource(subscriberProbe.ref, stageRef = _)
-
-      implicit val mat = ActorMaterializer()
-
-      val seq = source.take(15).runWith(Sink.seq)
-
-      subscriberProbe.expectMsg(FetchMessages(1000))
-      subscriberProbe.send(stageRef, MessagesPulled(createMessages(10)))
-      subscriberProbe.expectMsg(FetchMessages(1000))
-      subscriberProbe.send(stageRef, Failure(new StatusRuntimeException(Status.RESOURCE_EXHAUSTED)))
-      subscriberProbe.expectMsg(FetchMessages(1000))
-      subscriberProbe.send(stageRef, MessagesPulled(createMessages(5)))
-
-      val messages = Await.result(seq, 10.seconds)
-
-      messages.size shouldBe 15
-    }
-
     "terminate with failure on subscriber termination" in {
       val subscriberProbe    = TestProbe()
       var stageRef: ActorRef = null
 
       val source = createSource(subscriberProbe.ref, stageRef = _)
 
-      implicit val mat = ActorMaterializer()
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val sub = source.runWith(TestSink.probe[ReceivedMessage])
 
@@ -108,7 +85,7 @@ class PubSubSourceSpec
 
       val source = createSource(subscriberProbe.ref, stageRef = _)
 
-      implicit val mat = ActorMaterializer()
+      implicit val mat: ActorMaterializer = ActorMaterializer()
 
       val sub = source.take(1).runWith(TestSink.probe[ReceivedMessage])
 
@@ -117,7 +94,7 @@ class PubSubSourceSpec
       subscriberProbe.expectMsg(FetchMessages(1000))
       subscriberProbe.send(stageRef, MessagesPulled(createMessages(10)))
       sub.expectNextPF {
-        case msg: ReceivedMessage => msg.ackId shouldBe "id-1"
+        case msg: ReceivedMessage => msg.getAckId shouldBe "id-1"
       }
 
       sub.expectComplete()
@@ -125,34 +102,35 @@ class PubSubSourceSpec
   }
 
   private def createSource(subscriber: ActorRef, mappingCallback: (ActorRef => Unit)) =
-    Source.fromGraph(new PubSubSource(pubSubEmulatorUrl, "subs") {
-      override protected def createSubscriber(system: ActorSystem,
-                                              stageActor: GraphStageLogic.StageActor,
-                                              id: String): ActorRef = {
-        mappingCallback(stageActor.ref)
-        subscriber
+    Source.fromGraph(
+      new PubSubSource("projects/proj/subscriptions/subs",
+                       SubscriberStub.pubsubUrlToSettings(pubSubEmulatorUrl)) {
+        override protected def createSubscriber(system: ActorSystem,
+                                                stageActor: GraphStageLogic.StageActor,
+                                                id: String): ActorRef = {
+          mappingCallback(stageActor.ref)
+          subscriber
+        }
       }
-    })
+    )
 
   private def createMessages(count: Int): Seq[ReceivedMessage] =
-    for (i <- 1 to count) yield ReceivedMessage(s"id-$i")
+    for (i <- 1 to count)
+      yield
+        ReceivedMessage.newBuilder
+          .setMessage(PubSubMessage(s"id-$i").build())
+          .setAckId(s"id-$i")
+          .build()
 
-  private def preparePubSub()(implicit executionContext: ExecutionContextExecutor) = {
-    val project      = ProjectName(s"test-${UUID.randomUUID().toString}")
-    val topic        = TopicName(project, "top")
-    val subscription = SubscriptionName(project, "subs")
+  private def preparePubSub() = {
+    val settings             = newTestSetup()
+    val (_, _, subscription) = settings
 
-    val client = PubSubClient(pubSubEmulatorUrl)
+    def data(index: Int) = s"test-$index"
 
-    Await.ready(client.createTopic(Topic(topic.fullName)), 10.seconds)
-    Await.ready(client.createSubscription(Subscription(subscription.fullName, topic.fullName)),
-                10.seconds)
+    val messages = for (i <- 1 to 200) yield data(i)
 
-    def data(index: Int) = ByteString.copyFromUtf8(s"test-$index")
-
-    val messages = for (i <- 1 to 200) yield PubsubMessage(data(i))
-
-    Await.ready(client.publish(topic.fullName, messages), 10.seconds)
+    publishMessages(settings, messages: _*)
 
     subscription
   }

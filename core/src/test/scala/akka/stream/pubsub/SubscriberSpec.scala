@@ -1,30 +1,21 @@
 package akka.stream.pubsub
 
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.actor.Status.Failure
 import akka.stream.pubsub.Subscriber.{FetchMessages, MessagesPulled}
 import akka.testkit.TestKit
-import com.google.pubsub.v1.pubsub.Subscription
-import de.codecentric.akka.stream.gcloud.pubsub.client.{ProjectName, SubscriptionName, TopicName}
-import io.grpc.StatusRuntimeException
-import org.scalatest.time.{Millis, Seconds, Span}
+import com.google.api.gax.rpc.NotFoundException
+import gcloud.scala.pubsub._
+import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-
-import scala.concurrent.ExecutionContextExecutor
 
 class SubscriberSpec
     extends TestKit(ActorSystem("subscriber-test"))
     with WordSpecLike
     with Matchers
-    with PubSubClientHelpers
+    with PubSubTestKit
+    with DockerPubSub
     with BeforeAndAfterAll {
-
-  implicit val executionContext: ExecutionContextExecutor = scala.concurrent.ExecutionContext.global
-
-  implicit override val patienceConfig =
-    PatienceConfig(timeout = Span(60, Seconds), interval = Span(500, Millis))
 
   override def afterAll(): Unit = {
     system.terminate()
@@ -33,60 +24,37 @@ class SubscriberSpec
 
   "The subscriber" should {
     "respond with pulled messages" in {
-      val uuid = UUID.randomUUID().toString
-
-      val project          = ProjectName(s"test-$uuid")
-      val topic            = TopicName(project, "test")
-      val subscriptionName = SubscriptionName(project, "testSubscription")
-      val subscription     = Subscription(subscriptionName.fullName, topic.fullName)
+      val settings             = newTestSetup()
+      val (_, _, subscription) = settings
 
       val subscriber = system.actorOf(
-        Subscriber.props(testActor, pubSubEmulatorUrl, subscriptionName.fullName)
+        Subscriber.props(testActor, SubscriberStub.pubsubUrlToSettings(pubSubUrl), subscription)
       )
 
-      withClient { client =>
-        createTopic(client, topic)
+      publishMessages(settings, "A", "B", "C")
 
-        client.createSubscription(subscription).map {
-          _.name shouldBe subscriptionName.fullName
-        }
+      subscriber ! FetchMessages(3)
 
-        publishMessage(client, topic.fullName, "A")
-        publishMessage(client, topic.fullName, "B")
-        publishMessage(client, topic.fullName, "C")
-
-        subscriber ! FetchMessages(3)
-
-        expectMsgPF() {
-          case MessagesPulled(messages) =>
-            messages.size shouldBe 3
-        }
+      expectMsgPF() {
+        case MessagesPulled(messages) =>
+          messages.size shouldBe 3
       }
     }
 
     "respond with exception on error" in {
-      val uuid = UUID.randomUUID().toString
-
-      val project          = ProjectName(s"test-$uuid")
-      val topic            = TopicName(project, "test")
-      val subscriptionName = SubscriptionName(project, "testSubscription")
+      val settings     = newTestSetup()
+      val subscription = ProjectSubscriptionName(settings._1, "doesnotexist")
 
       val subscriber = system.actorOf(
-        Subscriber.props(testActor, pubSubEmulatorUrl, subscriptionName.fullName)
+        Subscriber.props(testActor, SubscriberStub.pubsubUrlToSettings(pubSubUrl), subscription)
       )
 
-      withClient { client =>
-        createTopic(client, topic)
+      publishMessages(settings, "A", "B", "C")
 
-        publishMessage(client, topic.fullName, "A")
-        publishMessage(client, topic.fullName, "B")
-        publishMessage(client, topic.fullName, "C")
+      subscriber ! FetchMessages(3)
 
-        subscriber ! FetchMessages(3)
-
-        expectMsgPF() {
-          case Failure(ex: StatusRuntimeException) =>
-        }
+      expectMsgPF() {
+        case Failure(_: NotFoundException) =>
       }
     }
   }

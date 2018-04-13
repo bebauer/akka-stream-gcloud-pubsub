@@ -5,8 +5,9 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.{TestSink, TestSource}
 import akka.testkit.TestKit
-import com.google.protobuf.ByteString
-import com.google.pubsub.v1.pubsub.{PubsubMessage, ReceivedMessage}
+import com.google.pubsub.v1.ReceivedMessage
+import gcloud.scala.pubsub._
+import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
@@ -17,7 +18,8 @@ class PubSubAcknowledgeFlowSpec
     with Matchers
     with ScalaFutures
     with PubSubTestKit
-    with BeforeAndAfterAll {
+    with BeforeAndAfterAll
+    with DockerPubSub {
 
   implicit val mat: ActorMaterializer = ActorMaterializer()
 
@@ -30,12 +32,12 @@ class PubSubAcknowledgeFlowSpec
   "the flow" should {
     "acknowledge messages" in {
       val settings = newTestSetup()
-      val messages = for (i <- 1 to 200)
-        yield PubsubMessage(ByteString.copyFromUtf8(s"message-$i"))
+      val messages = for (i <- 1 to 200) yield s"message-$i"
 
       publishMessages(settings, messages: _*)
 
-      val ackFlow = PubSubAcknowledgeFlow(settings._3.fullName, pubSubUrl)
+      val ackFlow =
+        PubSubAcknowledgeFlow(settings._3.fullName, SubscriberStub.pubsubUrlToSettings(pubSubUrl))
 
       val (pub, sub) = TestSource
         .probe[Seq[ReceivedMessage]]
@@ -44,64 +46,12 @@ class PubSubAcknowledgeFlowSpec
         .run()
 
       sub.request(1)
-      pub.sendNext(pullMessages(settings, 70))
+      pub.sendNext(
+        Seq(pullReceivedMessages(settings, 70): _*)
+      )
       val acknowledged = sub.expectNext()
 
       acknowledged.size shouldBe 70
-    }
-  }
-
-  "the batching flow" should {
-    "acknowledge messages" in {
-      import PubSubAcknowledgeFlow._
-
-      val settings = newTestSetup()
-      val messages = for (i <- 1 to 200)
-        yield PubsubMessage(ByteString.copyFromUtf8(s"message-$i"))
-
-      publishMessages(settings, messages: _*)
-
-      val ackFlow = PubSubAcknowledgeFlow(settings._3.fullName, pubSubUrl).batched()
-
-      val (pub, sub) = TestSource
-        .probe[ReceivedMessage]
-        .via(ackFlow)
-        .toMat(TestSink.probe[ReceivedMessage])(Keep.both)
-        .run()
-
-      val pulledMessages = pullMessages(settings, 100).take(70)
-
-      sub.request(70)
-      pulledMessages.foreach(pub.sendNext)
-
-      sub.expectNextN(70) shouldEqual pulledMessages
-    }
-  }
-
-  "the parallel batching flow" should {
-    "acknowledge messages" in {
-      import PubSubAcknowledgeFlow._
-
-      val settings = newTestSetup()
-      val messages = for (i <- 1 to 200)
-        yield PubsubMessage(ByteString.copyFromUtf8(s"message-$i"))
-
-      publishMessages(settings, messages: _*)
-
-      val ackFlow = PubSubAcknowledgeFlow(settings._3.fullName, pubSubUrl).parallel(3).batched(10)
-
-      val (pub, sub) = TestSource
-        .probe[ReceivedMessage]
-        .via(ackFlow)
-        .toMat(TestSink.probe[ReceivedMessage])(Keep.both)
-        .run()
-
-      val pulledMessages = pullMessages(settings, 100).take(70)
-
-      sub.request(70)
-      pulledMessages.foreach(pub.sendNext)
-
-      sub.expectNextN(70) should contain theSameElementsAs pulledMessages
     }
   }
 }

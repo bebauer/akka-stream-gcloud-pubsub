@@ -5,7 +5,7 @@
         </encoder>
     </appender>
 
-    <logger name="akka.stream.pubsub" level="DEBUG"/>
+    <logger name="akka.stream.pubsub" level="INFO"/>
 
     <logger name="io.grpc" level="ERROR" />
 

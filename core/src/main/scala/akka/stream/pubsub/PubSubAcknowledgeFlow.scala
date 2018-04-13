@@ -3,55 +3,35 @@ package akka.stream.pubsub
 import java.util.UUID
 
 import akka.NotUsed
-import akka.actor.{ActorRef, PoisonPill, Terminated}
+import akka.actor.{ActorRef, ActorSystem, PoisonPill, Terminated}
 import akka.stream._
 import akka.stream.pubsub.Acknowledger.{Acknowledge, Acknowledged}
-import akka.stream.scaladsl.{Balance, Flow, GraphDSL, Merge}
+import akka.stream.scaladsl.Flow
 import akka.stream.stage.GraphStageLogic.StageActor
 import akka.stream.stage.GraphStageLogic.StageActorRef.Receive
 import akka.stream.stage.{GraphStage, GraphStageLogic, InHandler, OutHandler}
-import com.google.pubsub.v1.pubsub.ReceivedMessage
-import de.codecentric.akka.stream.gcloud.pubsub.client.PubSubClient
+import com.google.cloud.pubsub.v1.stub.SubscriberStubSettings
+import com.google.pubsub.v1.ProjectSubscriptionName
+import com.typesafe.scalalogging.Logger
+import gcloud.scala.pubsub._
 
 import scala.annotation.tailrec
 
 object PubSubAcknowledgeFlow {
   def apply(
-      subscription: String,
-      url: String = PubSubClient.DefaultPubSubUrl
+      subscription: ProjectSubscriptionName,
+      settings: SubscriberStubSettings = SubscriberStub.Settings()
   ): Flow[ReceivedMessages, ReceivedMessages, NotUsed] =
-    Flow[ReceivedMessages].via(new PubSubAcknowledgeFlow(url, subscription))
-
-  implicit class AcknowledgeFlowUtils(flow: Flow[ReceivedMessages, ReceivedMessages, NotUsed]) {
-    def batched(size: Long = 50): Flow[ReceivedMessage, ReceivedMessage, NotUsed] =
-      Flow[ReceivedMessage]
-        .batch(size, seed => Seq(seed)) { (batch, element) =>
-          batch :+ element
-        }
-        .via(flow)
-        .mapConcat(identity)
-
-    def parallel(count: Int): Flow[ReceivedMessages, ReceivedMessages, NotUsed] =
-      Flow.fromGraph(GraphDSL.create() { implicit builder =>
-        import GraphDSL.Implicits._
-
-        val dispatch = builder.add(Balance[ReceivedMessages](count))
-        val merge    = builder.add(Merge[ReceivedMessages](count))
-
-        for (i <- 0 until count) {
-          dispatch.out(i) ~> flow.async ~> merge.in(i)
-        }
-
-        FlowShape(dispatch.in, merge.out)
-      })
-  }
+    Flow[ReceivedMessages].via(new PubSubAcknowledgeFlow(settings, subscription))
 }
 
-class PubSubAcknowledgeFlow(url: String, subscription: String)
+class PubSubAcknowledgeFlow(settings: SubscriberStubSettings, subscription: ProjectSubscriptionName)
     extends GraphStage[FlowShape[ReceivedMessages, ReceivedMessages]] {
 
-  val in: Inlet[ReceivedMessages]   = Inlet[ReceivedMessages]("Acknowledge.in")
-  val out: Outlet[ReceivedMessages] = Outlet[ReceivedMessages]("Acknowledge.out")
+  private val logger = Logger(classOf[PubSubAcknowledgeFlow])
+
+  private val in: Inlet[ReceivedMessages]   = Inlet[ReceivedMessages]("Acknowledge.in")
+  private val out: Outlet[ReceivedMessages] = Outlet[ReceivedMessages]("Acknowledge.out")
 
   override def shape: FlowShape[ReceivedMessages, ReceivedMessages] = FlowShape.of(in, out)
 
@@ -62,17 +42,25 @@ class PubSubAcknowledgeFlow(url: String, subscription: String)
       private var acknowledger: ActorRef                = _
       private var outBuffer: Iterator[ReceivedMessages] = Iterator.empty
       private val id                                    = UUID.randomUUID().toString
+      private var system: ActorSystem                   = _
+
+      logger.debug(s"creating acknowledge stage '$id'")
 
       override def preStart(): Unit = {
 
         self = getStageActor(processing)
 
         acknowledger = {
-          val system = ActorMaterializerHelper.downcast(materializer).system
-          system.actorOf(Acknowledger.props(self.ref, url, subscription), Acknowledger.name(id, 0))
+          system = ActorMaterializerHelper.downcast(materializer).system
+          system.actorOf(Acknowledger
+                           .props(self.ref, settings, subscription)
+                           .withDispatcher("akka.stream.gcloud.pubsub.acknowledge.dispatcher"),
+                         Acknowledger.name(id, 0))
         }
 
         stageActor.watch(acknowledger)
+
+        logger.debug(s"created acknowledge actor: ${acknowledger.path}")
       }
 
       def processing: Receive = {
@@ -95,6 +83,8 @@ class PubSubAcknowledgeFlow(url: String, subscription: String)
       }
 
       private def processAcknowledges(messages: ReceivedMessages): Unit = {
+        logger.debug(s"processing acknowledged messages (${messages.size})")
+
         if (outBuffer.hasNext) {
           outBuffer = outBuffer ++ Iterator(messages)
         } else {
@@ -108,6 +98,7 @@ class PubSubAcknowledgeFlow(url: String, subscription: String)
         if (isAvailable(out)) {
           if (outBuffer.hasNext) {
             val msg = outBuffer.next()
+            logger.trace(s"pushing message: $msg")
             push(out, msg)
             pump()
           } else {
@@ -120,8 +111,12 @@ class PubSubAcknowledgeFlow(url: String, subscription: String)
       setHandler(
         in,
         new InHandler {
-          override def onPush(): Unit =
-            acknowledger ! Acknowledge(grab(in))
+          override def onPush(): Unit = {
+            val messages = grab(in)
+            logger.debug(s"acknowledging grabbed messages: ${messages.size}")
+            logger.trace(messages.toString())
+            acknowledger ! Acknowledge(messages)
+          }
 
           override def onUpstreamFinish(): Unit = {
             setKeepGoing(true)
@@ -148,8 +143,10 @@ class PubSubAcknowledgeFlow(url: String, subscription: String)
         }
       )
 
-      override def postStop(): Unit =
-        stopClientActor()
+      override def postStop(): Unit = {
+        logger.debug("stopping acknowledge stage")
+        system.stop(acknowledger)
+      }
 
       private def stopClientActor(): Unit =
         acknowledger ! PoisonPill

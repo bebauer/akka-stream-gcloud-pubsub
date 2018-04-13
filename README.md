@@ -1,67 +1,67 @@
 # Akka Streams Google Cloud Pub/Sub
 
-A akka streams source and acknowledge flow for Google's Cloud Pub/Sub. 
-It uses GRPC for communication with Pub/Sub.
+An akka streams solution for Google's Cloud Pub/Sub. It supports stages for
+pulling, acknownleding and publishing messages.
 
-## Installation
-
-```scala
-"de.codecentric" %% "akka-stream-gcloud-pubsub" % "0.0.1"
-```
+It uses [gcloud-scala](https://github.com/bebauer/gcloud-scala) to communicate 
+with Pub/Sub and configure the stages.
 
 ## Usage
 
-There two classes to be used. `PubSubSource` and `PubSubAcknowledgeFlow`.
+```
+// Add resolver for https://dl.bintray.com/bebauer/maven/
+resolvers += Resolver.bintrayRepo("bebauer", "maven")
+
+// Add dependency
+"de.codecentric" %% "akka-stream-gcloud-pubsub" % "0.1.0"
+```
+
+The provided stages are `PubSubSource`, `PubSubAcknowledgeFlow` and 
+`PubSubPublishFlow`.
+
 The source pulls messages from Pub/Sub and pushes them onto the stream.
+
 The acknowledge flow acknowledges all incoming messages.
+
+The publish flow publishes all incoming messages.
 
 ### PubSubSource
 
 Creating the source:
 
-```scala
-// with default Pub/Sub URL
+```
+// with default settings
 Source.fromGraph(PubSubSource(subscriptionName))
 
-// with custom URL
-Source.fromGraph(PubSubSource(pubSubUrl, subscriptionName))
+// with custom settings
+Source.fromGraph(PubSubSource(subscriptionName, settings))
 ```
 
 Every `PubSubSource` maintains a single connection to Pub/Sub, 
 so for more throughput multiple sources can be combined.
 
-The `subscriptionName` must be the fully qualified name of the subscription:
-`projects/<project>/subscriptions/<subscription>`
-
 ### PubSubAcknowledgeFlow
 
 Create an acknowledge flow, which acknowledges a sequence of messages:
 
-```scala
-// with default Pub/Sub URL
+```
+// with default settings
 PubSubAcknowledgeFlow(subscriptionName)
 
-// with custom URL
-PubSubAcknowledgeFlow(subscriptionName, pubSubUrl)
+// with custom settings
+PubSubAcknowledgeFlow(subscriptionName, settings)
 ```
 
-The `subscriptionName` must be the fully qualified name of the subscription:
-`projects/<project>/subscriptions/<subscription>`
+### PubSubPublishFlow
 
-Create a flow the acknowledges messages parallel:
+Create a publish flow, which publishes a sequence of messages to Pub/Sub:
 
-```scala
-import PubSubAcknowledgeFlow._
-
-PubSubAcknowledgeFlow(subscriptionName).parallel(count)
 ```
+// with default settings
+PubSubPublishFlow(topicName)
 
-Create a flow the batches single messages before acknowledging:
-
-```scala
-import PubSubAcknowledgeFlow._
-
-PubSubAcknowledgeFlow(subscriptionName).batched(size)
+// with custom settings
+PubSubPublishFlow(topicName, settings)
 ```
 
 ## Configuration
@@ -73,17 +73,26 @@ There are several configuration options which can be set.
 Defines how many messages are requested from Pub/Sub at once. 
 The default is `1000`.
 
-**akka.stream.gcloud.pubsub.source.maxInboundMessageSize**
-
-Maximum GRPC frame size for incoming messages. 
-The default value is `1000000`.
-
 **akka.stream.gcloud.pubsub.source.maxParallelFetchRequests**
 
 Maximum amount of parallel fetch requests from the `PubSubSource` in case of high demand. 
 The default value is `10`.
 
-**akka.stream.gcloud.pubsub.source.waitingTime**
+## Example Stream
 
-The time the source waits for further requests when it gets a resource exhaustion error from Pub/Sub.
-The default value is `500ms`.
+```
+import gcloud.scala.pubsub._
+
+val source = Source.fromGraph(PubSubSource("projects/xxx/subscriptions/xxx"))
+
+val ackFlow = PubSubAcknowledgeFlow("projects/xxx/subscriptions/xxx")
+
+val publishFlow = PubSubPublishFlow("projects/xxx/topics/xxx")
+
+source.groupedWithin(500, 100.milliseconds)
+      .via(ackFlow)
+      .map(_.map(receivedToPubSubMessage))
+      .via(publishFlow)
+      .toMat(Sink.ignore)
+      .run()
+```

@@ -1,4 +1,4 @@
-package de.codecentric.akka.stream.gcloud.pubsub.benchmark
+package akka.stream.pubsub.benchmark
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
@@ -10,6 +10,7 @@ import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
 import io.circe.generic.auto._
 
 import scala.collection.JavaConverters._
+import scala.concurrent.ExecutionContextExecutor
 import scala.concurrent.duration._
 import scala.io.StdIn
 
@@ -21,9 +22,9 @@ object Main
 
   final case class TestConfig(amount: Int, pull: Int, ack: Boolean = true)
 
-  implicit val system           = ActorSystem("benchmark-system")
-  implicit val materializer     = ActorMaterializer()
-  implicit val executionContext = system.dispatcher
+  implicit val system: ActorSystem                        = ActorSystem("benchmark-system")
+  implicit val materializer: ActorMaterializer            = ActorMaterializer()
+  implicit val executionContext: ExecutionContextExecutor = system.dispatcher
 
   val routes =
   path("run") {

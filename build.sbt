@@ -9,31 +9,19 @@ lazy val core = project
   .in(file("core"))
   .settings(name := "akka-stream-gcloud-pubsub")
   .settings(commonSettings)
-  .settings(publishSettings)
   .settings(
     libraryDependencies ++= Seq(
       library.AkkaActor,
       library.AkkaStream,
       library.AkkaSlf4j,
       library.Slf4jApi,
-      library.LogbackClassic,
-      library.NettyTcNative,
-      library.GrpcNetty,
-      library.GrpcStub,
-      library.GrpcAuth,
-      library.GrpcProtobuf,
-      library.GoogleOauth2,
-      library.GfcGuava,
-      library.ScalaPbRuntimeGrpc % "protobuf, compile",
-      library.AkkaTestkit        % Test,
-      library.AkkaStreamTestkit  % Test,
-      library.Scalactic          % Test,
-      library.ScalaTest          % Test
-    )
-  )
-  .settings(
-    PB.targets in Compile in ThisBuild := Seq(
-      scalapb.gen() -> (sourceManaged in Compile).value
+      library.ScalaLogging,
+      library.GCloudScalaPubSub,
+      library.LogbackClassic           % Test,
+      library.AkkaTestkit              % Test,
+      library.AkkaStreamTestkit        % Test,
+      library.ScalaTest                % Test,
+      library.GCloudScalaPubSubTestkit % Test
     )
   )
 
@@ -43,7 +31,7 @@ lazy val benchmark = project
   .settings(commonSettings)
   .settings(
     assemblyJarName in assembly := "benchmark.jar",
-    mainClass in assembly := Some("de.codecentric.akka.stream.gcloud.pubsub.benchmark.Main"),
+    mainClass in assembly := Some("akka.stream.gcloud.pubsub.benchmark.Main"),
     publish := {},
     publishLocal := {}
   )
@@ -54,15 +42,16 @@ lazy val benchmark = project
       library.CirceCore,
       library.CirceGeneric,
       library.CirceParser,
-      library.Metrics
+      library.Metrics,
+      library.LogbackClassic
     )
   )
   .dependsOn(core)
 
 lazy val commonSettings = Seq(
   organization := "de.codecentric",
-  scalaVersion := "2.12.3",
-  crossScalaVersions := Seq("2.11.11", "2.12.3"),
+  scalaVersion := "2.12.4",
+  crossScalaVersions := Seq("2.11.11", "2.12.4"),
   scalacOptions ++= Seq(
     "-unchecked",
     "-deprecation",
@@ -84,55 +73,41 @@ lazy val commonSettings = Seq(
     case x =>
       val oldStrategy = (assemblyMergeStrategy in assembly).value
       oldStrategy(x)
-  }
-)
-
-lazy val publishSettings = Seq(
-  publishTo := {
-    val nexus = "https://nexus.dev.crm.conrad24.com/repository/"
-    Some("releases" at nexus + "maven-releases")
-  }
+  },
+  resolvers += Resolver.bintrayRepo("bebauer", "maven"),
+  licenses += ("Apache-2.0", url("http://www.apache.org/licenses/LICENSE-2.0"))
 )
 
 lazy val library = new {
 
   object Version {
-    val Akka               = "2.5.4"
-    val AkkaHttp           = "10.0.10"
-    val AkkaHttpCirce      = "1.16.1"
-    val Slf4j              = "1.7.25"
-    val Logback            = "1.2.2"
-    val Grpc               = "1.6.1"
-    val ScalaTest          = "3.0.1"
-    val NettyTcNative      = "2.0.3.Final"
-    val GoogleOauth2       = "0.8.0"
-    val GfcGuava           = "0.2.5"
-    val ScalaPbRuntimeGrpc = "0.6.2"
-    val CirceVersion       = "0.8.0"
-    val MetricsVersion     = "3.5.8_a2.4"
+    val Akka                = "2.5.11"
+    val AkkaHttp            = "10.1.0"
+    val AkkaHttpCirce       = "1.16.1"
+    val Slf4j               = "1.7.25"
+    val Logback             = "1.2.2"
+    val ScalaTest           = "3.0.1"
+    val CirceVersion        = "0.8.0"
+    val MetricsVersion      = "3.5.8_a2.4"
+    val GCloudScalaVersion  = "0.10.0"
+    val ScalaLoggingVersion = "3.9.0"
   }
 
-  val AkkaActor          = "com.typesafe.akka"      %% "akka-actor"                     % Version.Akka
-  val AkkaStream         = "com.typesafe.akka"      %% "akka-stream"                    % Version.Akka
-  val AkkaSlf4j          = "com.typesafe.akka"      %% "akka-slf4j"                     % Version.Akka
-  val AkkaHttp           = "com.typesafe.akka"      %% "akka-http"                      % Version.AkkaHttp
-  val AkkaHttpCirce      = "de.heikoseeberger"      %% "akka-http-circe"                % Version.AkkaHttpCirce
-  val CirceCore          = "io.circe"               %% "circe-core"                     % Version.CirceVersion
-  val CirceGeneric       = "io.circe"               %% "circe-generic"                  % Version.CirceVersion
-  val CirceParser        = "io.circe"               %% "circe-parser"                   % Version.CirceVersion
-  val Slf4jApi           = "org.slf4j"              % "slf4j-api"                       % Version.Slf4j
-  val LogbackClassic     = "ch.qos.logback"         % "logback-classic"                 % Version.Logback
-  val AkkaTestkit        = "com.typesafe.akka"      %% "akka-testkit"                   % Version.Akka
-  val AkkaStreamTestkit  = "com.typesafe.akka"      %% "akka-stream-testkit"            % Version.Akka
-  val GrpcNetty          = "io.grpc"                % "grpc-netty"                      % Version.Grpc
-  val GrpcStub           = "io.grpc"                % "grpc-stub"                       % Version.Grpc
-  val GrpcAuth           = "io.grpc"                % "grpc-auth"                       % Version.Grpc
-  val GrpcProtobuf       = "io.grpc"                % "grpc-protobuf"                   % Version.Grpc
-  val NettyTcNative      = "io.netty"               % "netty-tcnative-boringssl-static" % Version.NettyTcNative
-  val GoogleOauth2       = "com.google.auth"        % "google-auth-library-oauth2-http" % Version.GoogleOauth2
-  val GfcGuava           = "com.gilt"               %% "gfc-guava"                      % Version.GfcGuava
-  val Scalactic          = "org.scalactic"          %% "scalactic"                      % Version.ScalaTest
-  val ScalaTest          = "org.scalatest"          %% "scalatest"                      % Version.ScalaTest
-  val ScalaPbRuntimeGrpc = "com.trueaccord.scalapb" %% "scalapb-runtime-grpc"           % Version.ScalaPbRuntimeGrpc
-  val Metrics            = "nl.grons"               %% "metrics-scala"                  % Version.MetricsVersion
+  val AkkaActor                = "com.typesafe.akka"          %% "akka-actor"                  % Version.Akka
+  val AkkaStream               = "com.typesafe.akka"          %% "akka-stream"                 % Version.Akka
+  val AkkaSlf4j                = "com.typesafe.akka"          %% "akka-slf4j"                  % Version.Akka
+  val AkkaHttp                 = "com.typesafe.akka"          %% "akka-http"                   % Version.AkkaHttp
+  val AkkaHttpCirce            = "de.heikoseeberger"          %% "akka-http-circe"             % Version.AkkaHttpCirce
+  val CirceCore                = "io.circe"                   %% "circe-core"                  % Version.CirceVersion
+  val CirceGeneric             = "io.circe"                   %% "circe-generic"               % Version.CirceVersion
+  val CirceParser              = "io.circe"                   %% "circe-parser"                % Version.CirceVersion
+  val Slf4jApi                 = "org.slf4j"                  % "slf4j-api"                    % Version.Slf4j
+  val LogbackClassic           = "ch.qos.logback"             % "logback-classic"              % Version.Logback
+  val AkkaTestkit              = "com.typesafe.akka"          %% "akka-testkit"                % Version.Akka
+  val AkkaStreamTestkit        = "com.typesafe.akka"          %% "akka-stream-testkit"         % Version.Akka
+  val ScalaTest                = "org.scalatest"              %% "scalatest"                   % Version.ScalaTest
+  val Metrics                  = "nl.grons"                   %% "metrics-scala"               % Version.MetricsVersion
+  val GCloudScalaPubSub        = "gcloud-scala"               %% "gcloud-scala-pubsub"         % Version.GCloudScalaVersion
+  val GCloudScalaPubSubTestkit = "gcloud-scala"               %% "gcloud-scala-pubsub-testkit" % Version.GCloudScalaVersion
+  val ScalaLogging             = "com.typesafe.scala-logging" %% "scala-logging"               % Version.ScalaLoggingVersion
 }

@@ -1,12 +1,11 @@
 package akka.stream.pubsub
 
 import akka.actor.ActorSystem
-import akka.stream.{ActorMaterializer, KillSwitches}
-import akka.stream.pubsub.PubSubAcknowledgeFlow._
 import akka.stream.scaladsl.{Keep, Sink, Source}
+import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.testkit.TestKit
-import com.google.protobuf.ByteString
-import com.google.pubsub.v1.pubsub.PubsubMessage
+import gcloud.scala.pubsub._
+import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.tagobjects.Slow
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
@@ -21,6 +20,7 @@ class StreamSpec
     with Matchers
     with ScalaFutures
     with PubSubTestKit
+    with DockerPubSub
     with BeforeAndAfterAll {
 
   implicit val mat: ActorMaterializer = ActorMaterializer()
@@ -34,17 +34,22 @@ class StreamSpec
   "the PubSub stream" should {
     "acknowledge all processed messages" taggedAs Slow in {
       val (project, topic, subscription) = newTestSetup()
-      val messages = for (i <- 1 to 20)
-        yield PubsubMessage(ByteString.copyFromUtf8(s"message-$i"))
+      val messages                       = for (i <- 1 to 20) yield s"message-$i"
 
       publishMessages((project, topic, subscription), messages: _*)
 
-      val source  = Source.fromGraph(PubSubSource(pubSubUrl, subscription.fullName))
-      val ackFlow = PubSubAcknowledgeFlow(subscription.fullName, pubSubUrl).parallel(2).batched(5)
+      val source =
+        Source.fromGraph(
+          PubSubSource(subscription.fullName, SubscriberStub.Settings(pubSubUrl))
+        )
+      val ackFlow =
+        PubSubAcknowledgeFlow(subscription.fullName, SubscriberStub.Settings(pubSubUrl))
 
       val (killSwitch, results) = source
         .viaMat(KillSwitches.single)(Keep.right)
+        .groupedWithin(500, 100.milliseconds)
         .viaMat(ackFlow)(Keep.left)
+        .mapConcat(collection.immutable.Seq(_: _*))
         .toMat(Sink.seq)(Keep.both)
         .run()
 
@@ -57,12 +62,14 @@ class StreamSpec
 
     "re-pull unacknowledged messages" taggedAs Slow in {
       val (project, topic, subscription) = newTestSetup()
-      val messages = for (i <- 1 to 20)
-        yield PubsubMessage(ByteString.copyFromUtf8(s"message-$i"))
+      val messages                       = for (i <- 1 to 20) yield s"message-$i"
 
       publishMessages((project, topic, subscription), messages: _*)
 
-      val source = Source.fromGraph(PubSubSource(pubSubUrl, subscription.fullName))
+      val source =
+        Source.fromGraph(
+          PubSubSource(subscription.fullName, SubscriberStub.pubsubUrlToSettings(pubSubUrl))
+        )
 
       val (killSwitch, results) = source
         .viaMat(KillSwitches.single)(Keep.right)

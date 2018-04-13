@@ -1,9 +1,11 @@
-package de.codecentric.akka.stream.gcloud.pubsub.benchmark
+package akka.stream.pubsub.benchmark
 
 import akka.actor.ActorSystem
 import akka.stream.ActorMaterializer
 import akka.stream.pubsub.{PubSubAcknowledgeFlow, PubSubSource}
 import akka.stream.scaladsl._
+import com.google.pubsub.v1.ReceivedMessage
+import gcloud.scala.pubsub._
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -19,9 +21,10 @@ object TestStream extends Config with nl.grons.metrics.scala.DefaultInstrumented
     } else
       Source.fromGraph(PubSubSource(subscription))
 
-    import PubSubAcknowledgeFlow._
-
-    val ackFlow = PubSubAcknowledgeFlow(subscription).batched(size = 500)
+    val ackFlow = Flow[ReceivedMessage]
+      .groupedWeightedWithin(maxMessageSize, groupDuration)(_.getMessage.getData.size())
+      .via(PubSubAcknowledgeFlow(subscription))
+      .mapConcat(scala.collection.immutable.Seq(_: _*))
 
     val start = System.nanoTime()
 
