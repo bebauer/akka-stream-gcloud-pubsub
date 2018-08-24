@@ -5,6 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.{TestSink, TestSource}
 import akka.testkit.TestKit
+import com.google.api.gax.core.NoCredentialsProvider
 import com.google.pubsub.v1.ReceivedMessage
 import gcloud.scala.pubsub._
 import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
@@ -37,7 +38,10 @@ class PubSubAcknowledgeFlowSpec
       publishMessages(settings, messages: _*)
 
       val ackFlow =
-        PubSubAcknowledgeFlow(settings._3.fullName, SubscriberStub.pubsubUrlToSettings(pubSubUrl))
+        PubSubAcknowledgeFlow(settings._3.fullName,
+                              SubscriberStub
+                                .pubsubUrlToSettings(pubSubUrl)
+                                .copy(credentialsProvider = NoCredentialsProvider.create()))
 
       val (pub, sub) = TestSource
         .probe[Seq[ReceivedMessage]]

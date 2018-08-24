@@ -7,6 +7,7 @@ import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.stage.GraphStageLogic
 import akka.stream.testkit.scaladsl.TestSink
 import akka.testkit.{TestKit, TestProbe}
+import com.google.api.gax.core.NoCredentialsProvider
 import com.google.pubsub.v1.ReceivedMessage
 import gcloud.scala.pubsub._
 import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
@@ -47,7 +48,10 @@ class PubSubSourceSpec
 
         val source =
           Source.fromGraph(
-            PubSubSource(subscription, SubscriberStub.pubsubUrlToSettings(pubSubEmulatorUrl))
+            PubSubSource(subscription,
+                         SubscriberStub
+                           .pubsubUrlToSettings(pubSubEmulatorUrl)
+                           .copy(credentialsProvider = NoCredentialsProvider.create()))
           )
 
         val seq = source.take(200).runWith(Sink.seq)
@@ -101,10 +105,12 @@ class PubSubSourceSpec
     }
   }
 
-  private def createSource(subscriber: ActorRef, mappingCallback: (ActorRef => Unit)) =
+  private def createSource(subscriber: ActorRef, mappingCallback: ActorRef => Unit) =
     Source.fromGraph(
       new PubSubSource("projects/proj/subscriptions/subs",
-                       SubscriberStub.pubsubUrlToSettings(pubSubEmulatorUrl)) {
+                       SubscriberStub
+                         .pubsubUrlToSettings(pubSubEmulatorUrl)
+                         .copy(credentialsProvider = NoCredentialsProvider.create())) {
         override protected def createSubscriber(system: ActorSystem,
                                                 stageActor: GraphStageLogic.StageActor,
                                                 id: String): ActorRef = {
@@ -118,7 +124,7 @@ class PubSubSourceSpec
     for (i <- 1 to count)
       yield
         ReceivedMessage.newBuilder
-          .setMessage(PubSubMessage(s"id-$i").build())
+          .setMessage(PubsubMessage(s"id-$i").build())
           .setAckId(s"id-$i")
           .build()
 

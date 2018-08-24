@@ -5,6 +5,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Keep
 import akka.stream.testkit.scaladsl.{TestSink, TestSource}
 import akka.testkit.TestKit
+import com.google.api.gax.core.NoCredentialsProvider
 import gcloud.scala.pubsub._
 import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
 import org.scalatest.concurrent.ScalaFutures
@@ -33,11 +34,16 @@ class PubSubPublishFlowSpec
     "publish all messages" in {
       val settings      = newTestSetup()
       val (_, topic, _) = settings
-      val messages      = for (i <- 1 to 200) yield PubSubMessage(s"message-$i").build()
+      val messages      = for (i <- 1 to 200) yield PubsubMessage(s"message-$i").build()
 
       val (pub, sub) = TestSource
         .probe[PublishMessages]
-        .via(PubSubPublishFlow(topic, PublisherStub.pubsubUrlToSettings(pubSubUrl)))
+        .via(
+          PubSubPublishFlow(topic,
+                            PublisherStub
+                              .pubsubUrlToSettings(pubSubUrl)
+                              .copy(credentialsProvider = NoCredentialsProvider.create()))
+        )
         .toMat(TestSink.probe[PublishedIds])(Keep.both)
         .run()
 

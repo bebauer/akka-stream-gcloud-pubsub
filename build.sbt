@@ -50,8 +50,8 @@ lazy val benchmark = project
 
 lazy val commonSettings = Seq(
   organization := "de.codecentric",
-  scalaVersion := "2.12.4",
-  crossScalaVersions := Seq("2.11.11", "2.12.4"),
+  scalaVersion := "2.12.6",
+  crossScalaVersions := Seq("2.11.12", "2.12.6"),
   scalacOptions ++= Seq(
     "-unchecked",
     "-deprecation",
@@ -81,15 +81,15 @@ lazy val commonSettings = Seq(
 lazy val library = new {
 
   object Version {
-    val Akka                = "2.5.11"
-    val AkkaHttp            = "10.1.0"
-    val AkkaHttpCirce       = "1.16.1"
+    val Akka                = "2.5.14"
+    val AkkaHttp            = "10.1.4"
+    val AkkaHttpCirce       = "1.21.0"
     val Slf4j               = "1.7.25"
     val Logback             = "1.2.2"
-    val ScalaTest           = "3.0.1"
-    val CirceVersion        = "0.8.0"
+    val ScalaTest           = "3.0.4"
+    val CirceVersion        = "0.9.3"
     val MetricsVersion      = "3.5.8_a2.4"
-    val GCloudScalaVersion  = "0.10.0"
+    val GCloudScalaVersion  = "0.11.1"
     val ScalaLoggingVersion = "3.9.0"
   }
 

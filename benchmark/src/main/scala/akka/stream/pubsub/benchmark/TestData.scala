@@ -63,7 +63,7 @@ object TestData extends App with Config {
 
         requests = requests :+ publisher.publishAsync(
           topic = topic,
-          messages = i.map(_ => PubSubMessage(s"A" * 1024 * 8).build()) // 8 Kb Message
+          messages = i.map(_ => PubsubMessage(s"A" * 1024 * 8).build()) // 8 Kb Message
         )
 
         last = i.last

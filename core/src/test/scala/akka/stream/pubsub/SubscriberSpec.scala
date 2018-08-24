@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.actor.Status.Failure
 import akka.stream.pubsub.Subscriber.{FetchMessages, MessagesPulled}
 import akka.testkit.TestKit
+import com.google.api.gax.core.NoCredentialsProvider
 import com.google.api.gax.rpc.NotFoundException
 import gcloud.scala.pubsub._
 import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
@@ -28,7 +29,11 @@ class SubscriberSpec
       val (_, _, subscription) = settings
 
       val subscriber = system.actorOf(
-        Subscriber.props(testActor, SubscriberStub.pubsubUrlToSettings(pubSubUrl), subscription)
+        Subscriber.props(testActor,
+                         SubscriberStub
+                           .pubsubUrlToSettings(pubSubUrl)
+                           .copy(credentialsProvider = NoCredentialsProvider.create()),
+                         subscription)
       )
 
       publishMessages(settings, "A", "B", "C")
@@ -46,7 +51,11 @@ class SubscriberSpec
       val subscription = ProjectSubscriptionName(settings._1, "doesnotexist")
 
       val subscriber = system.actorOf(
-        Subscriber.props(testActor, SubscriberStub.pubsubUrlToSettings(pubSubUrl), subscription)
+        Subscriber.props(testActor,
+                         SubscriberStub
+                           .pubsubUrlToSettings(pubSubUrl)
+                           .copy(credentialsProvider = NoCredentialsProvider.create()),
+                         subscription)
       )
 
       publishMessages(settings, "A", "B", "C")

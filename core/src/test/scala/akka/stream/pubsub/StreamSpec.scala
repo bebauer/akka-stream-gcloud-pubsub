@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, KillSwitches}
 import akka.testkit.TestKit
+import com.google.api.gax.core.NoCredentialsProvider
 import gcloud.scala.pubsub._
 import gcloud.scala.pubsub.testkit.{DockerPubSub, PubSubTestKit}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
@@ -40,10 +41,16 @@ class StreamSpec
 
       val source =
         Source.fromGraph(
-          PubSubSource(subscription.fullName, SubscriberStub.Settings(pubSubUrl))
+          PubSubSource(subscription.fullName,
+                       SubscriberStub
+                         .Settings(pubSubUrl)
+                         .copy(credentialsProvider = NoCredentialsProvider.create()))
         )
       val ackFlow =
-        PubSubAcknowledgeFlow(subscription.fullName, SubscriberStub.Settings(pubSubUrl))
+        PubSubAcknowledgeFlow(subscription.fullName,
+                              SubscriberStub
+                                .Settings(pubSubUrl)
+                                .copy(credentialsProvider = NoCredentialsProvider.create()))
 
       val (killSwitch, results) = source
         .viaMat(KillSwitches.single)(Keep.right)
@@ -68,7 +75,10 @@ class StreamSpec
 
       val source =
         Source.fromGraph(
-          PubSubSource(subscription.fullName, SubscriberStub.pubsubUrlToSettings(pubSubUrl))
+          PubSubSource(subscription.fullName,
+                       SubscriberStub
+                         .pubsubUrlToSettings(pubSubUrl)
+                         .copy(credentialsProvider = NoCredentialsProvider.create()))
         )
 
       val (killSwitch, results) = source
