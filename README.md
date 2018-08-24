@@ -15,7 +15,7 @@ with Pub/Sub and configure the stages.
 resolvers += Resolver.bintrayRepo("bebauer", "maven")
 
 // Add dependency
-"de.codecentric" %% "akka-stream-gcloud-pubsub" % "0.1.0"
+"de.codecentric" %% "akka-stream-gcloud-pubsub" % "0.2.0"
 ```
 
 The provided stages are `PubSubSource`, `PubSubAcknowledgeFlow` and 
